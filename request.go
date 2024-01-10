@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -14,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	simplejson "github.com/bitly/go-simplejson"
+	"github.com/bitly/go-simplejson"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
@@ -58,8 +57,8 @@ type PathParam struct {
 }
 
 // SubPath set subPath
-// e.g. /api/v1/credential/init
 func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
+	r.subPath = subPath
 	for _, v := range args {
 		val := reflect.ValueOf(v.Value)
 		kind := val.Kind()
@@ -73,7 +72,6 @@ func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
 			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(v.Value))
 		}
 	}
-	r.subPath = r.c.gatewayPrefix + subPath
 	return r
 }
 
@@ -123,8 +121,14 @@ func (r *Request) Params(args ...QueryParam) *Request {
 
 // defaultUrl get default url for common request
 func (r *Request) defaultUrl() (string, error) {
-	if r.c.protocol == "" || r.c.addr == "" || r.c.port == "" {
-		return "", errors.New("invalid url, you may not login")
+	if r.c.protocol == "" || r.c.addr == "" {
+		return "", errors.New("invalid url, please check")
+	}
+
+	if r.c.protocol == "https" && r.c.port == "" {
+		r.c.port = "443"
+	} else if r.c.protocol == "http" && r.c.port == "" {
+		r.c.port = "80"
 	}
 
 	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
@@ -185,12 +189,12 @@ type Result struct {
 // Error type:
 // http.Client.Do errors are returned directly.
 func (r *Request) Do(ctx context.Context) Result {
-	url, err := r.defaultUrl()
+	defaultUrl, err := r.defaultUrl()
 	if err != nil {
 		return Result{err: err}
 	}
 
-	request, err := http.NewRequestWithContext(ctx, r.verb, url, r.body)
+	request, err := http.NewRequestWithContext(ctx, r.verb, defaultUrl, r.body)
 	if err != nil {
 		return Result{err: err}
 	}
@@ -231,7 +235,7 @@ func (r *Request) Do(ctx context.Context) Result {
 		return Result{err: errors.Errorf("unhealthy status code: [%d], status message: [%s]", rawResp.StatusCode, rawResp.Status)}
 	}
 
-	data, err := ioutil.ReadAll(rawResp.Body)
+	data, err := io.ReadAll(rawResp.Body)
 	if err != nil {
 		return Result{err: err, statusCode: rawResp.StatusCode, status: rawResp.Status}
 	}
@@ -249,7 +253,7 @@ func (r *Request) Do(ctx context.Context) Result {
 // Error type:
 // http.Client.Do errors are returned directly.
 func (r *Request) DoUpload(ctx context.Context, fieldName string, filename string, filedata []byte) Result {
-	url, err := r.defaultUrl()
+	defaultUrl, err := r.defaultUrl()
 	if err != nil {
 		return Result{err: err}
 	}
@@ -269,7 +273,7 @@ func (r *Request) DoUpload(ctx context.Context, fieldName string, filename strin
 	if err != nil {
 		return Result{err: err}
 	}
-	request, err := http.NewRequestWithContext(ctx, r.verb, url, payload)
+	request, err := http.NewRequestWithContext(ctx, r.verb, defaultUrl, payload)
 	if err != nil {
 		return Result{err: err}
 	}
@@ -308,7 +312,7 @@ func (r *Request) DoUpload(ctx context.Context, fieldName string, filename strin
 
 	defer rawResp.Body.Close()
 
-	data, err := ioutil.ReadAll(rawResp.Body)
+	data, err := io.ReadAll(rawResp.Body)
 	if err != nil {
 		return Result{err: err, statusCode: rawResp.StatusCode, status: rawResp.Status}
 	}
@@ -326,11 +330,11 @@ func (r *Request) DoUpload(ctx context.Context, fieldName string, filename strin
 }
 
 func (r *Request) WsConn(ctx context.Context) (*websocket.Conn, *http.Response, error) {
-	url, err := r.wsUrl()
+	wsUrl, err := r.wsUrl()
 	if err != nil {
 		return nil, nil, err
 	}
-	return websocket.DefaultDialer.DialContext(ctx, url, r.c.headers)
+	return websocket.DefaultDialer.DialContext(ctx, wsUrl, r.c.headers)
 }
 
 func doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
@@ -388,7 +392,7 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 		parser := protojson.UnmarshalOptions{
 			DiscardUnknown: true,
 		}
-		err = parser.Unmarshal([]byte(marshalJSON), v)
+		err = parser.Unmarshal(marshalJSON, v)
 	default:
 		err = json.Unmarshal(marshalJSON, &obj)
 	}
@@ -408,12 +412,12 @@ func (r Result) StatusCode() int {
 
 // Stream proto Stream way return io.ReadCloser
 func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
-	url, err := r.defaultUrl()
+	defaultUrl, err := r.defaultUrl()
 	if err != nil {
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, r.verb, url, r.body)
+	request, err := http.NewRequestWithContext(ctx, r.verb, defaultUrl, r.body)
 	if err != nil {
 		return nil, err
 	}
@@ -488,4 +492,9 @@ func (r Result) RawResponse() ([]byte, error) {
 // Error returns the error executing the request, nil if no error occurred.
 func (r Result) Error() error {
 	return r.err
+}
+
+// Status returns the status executing the request
+func (r Result) Status() string {
+	return r.status
 }

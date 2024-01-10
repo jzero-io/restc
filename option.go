@@ -2,8 +2,23 @@ package restc
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 )
+
+func WithUrl(u string) Opt {
+	return func(c *RESTClient) error {
+		// parse url
+		parse, err := url.Parse(u)
+		if err != nil {
+			return err
+		}
+		c.protocol = parse.Scheme
+		c.addr = parse.Hostname()
+		c.port = parse.Port()
+		return nil
+	}
+}
 
 func WithClient(client *http.Client) Opt {
 	return func(c *RESTClient) error {
@@ -50,13 +65,6 @@ func WithRetryTimes(times int) Opt {
 func WithRetryDelay(time time.Duration) Opt {
 	return func(c *RESTClient) error {
 		c.retryDelay = time
-		return nil
-	}
-}
-
-func WithGatewayPrefix(prefix string) Opt {
-	return func(c *RESTClient) error {
-		c.gatewayPrefix = prefix
 		return nil
 	}
 }
