@@ -26,11 +26,9 @@ import (
 type Request struct {
 	c *RESTClient
 
-	verb string
-
+	verb    string
 	subPath string
-
-	params string
+	params  string
 
 	// output
 	err  error
@@ -38,7 +36,6 @@ type Request struct {
 }
 
 func NewRequest(c *RESTClient) *Request {
-
 	r := &Request{
 		c: c,
 	}
@@ -67,8 +64,10 @@ func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
 				panic(err)
 			}
 			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(js[1:len(js)-1]))
+			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(js[1:len(js)-1]))
 		} else {
 			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(v.Value))
+			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(v.Value))
 		}
 	}
 	return r
