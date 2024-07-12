@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -239,88 +238,6 @@ func (r *Request) Do(ctx context.Context) Result {
 	if err != nil {
 		return Result{err: err, statusCode: rawResp.StatusCode, status: rawResp.Status}
 	}
-	return Result{
-		body:       data,
-		err:        nil,
-		statusCode: rawResp.StatusCode,
-		status:     rawResp.Status,
-	}
-}
-
-// DoUpload format and executes the upload request. Returns a Result object for easy response
-// processing.
-//
-// Error type:
-// http.Client.Do errors are returned directly.
-func (r *Request) DoUpload(ctx context.Context, fieldName string, filename string, filedata []byte) Result {
-	defaultUrl, err := r.defaultUrl()
-	if err != nil {
-		return Result{err: err}
-	}
-
-	payload := &bytes.Buffer{}
-	writer := multipart.NewWriter(payload)
-
-	part, err := writer.CreateFormFile(fieldName, filename)
-	if err != nil {
-		return Result{err: err}
-	}
-	_, err = io.Copy(part, bytes.NewReader(filedata))
-	if err != nil {
-		return Result{err: err}
-	}
-	err = writer.Close()
-	if err != nil {
-		return Result{err: err}
-	}
-	request, err := http.NewRequestWithContext(ctx, r.verb, defaultUrl, payload)
-	if err != nil {
-		return Result{err: err}
-	}
-
-	headers := r.c.headers
-	headers.Set("Content-Type", writer.FormDataContentType())
-	request.Header = headers
-
-	if r.c.client == nil {
-		r.c.client = http.DefaultClient
-	}
-
-	if r.c.retryTimes == 0 {
-		r.c.retryTimes = 1
-	}
-
-	var rawResp *http.Response
-	// if meet error, retry times that you set
-	for k := 0; k < r.c.retryTimes; k++ {
-		rawResp, err = doRequest(r.c.client, request)
-		if err != nil {
-			// sleep retry delay
-			time.Sleep(r.c.retryDelay)
-			continue
-		}
-		break
-	}
-
-	if err != nil {
-		return Result{err: err}
-	}
-
-	if rawResp == nil {
-		return Result{err: errors.New("http response is nil")}
-	}
-
-	defer rawResp.Body.Close()
-
-	data, err := io.ReadAll(rawResp.Body)
-	if err != nil {
-		return Result{err: err, statusCode: rawResp.StatusCode, status: rawResp.Status}
-	}
-
-	if rawResp.StatusCode != 200 {
-		return Result{err: errors.Errorf("unhealthy status code: [%d], status message: [%s]", rawResp.StatusCode, rawResp.Status), body: data}
-	}
-
 	return Result{
 		body:       data,
 		err:        nil,

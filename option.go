@@ -20,13 +20,6 @@ func WithUrl(u string) Opt {
 	}
 }
 
-func WithClient(client *http.Client) Opt {
-	return func(c *RESTClient) error {
-		c.client = client
-		return nil
-	}
-}
-
 func WithHeaders(headers http.Header) Opt {
 	return func(c *RESTClient) error {
 		c.headers = headers

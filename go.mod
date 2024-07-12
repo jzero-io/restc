@@ -1,4 +1,4 @@
-module github.com/jaronnie/restc
+module github.com/jzero-io/restc
 
 go 1.15
 
