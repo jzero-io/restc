@@ -265,6 +265,11 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 
 	if r.StatusCode() != 200 {
 		s := string(r.body)
+
+		if len(s) == 0 {
+			return fmt.Errorf("empty response body, status code: %d", r.StatusCode())
+		}
+
 		if isWarpHttpResponse {
 			j, err := simplejson.NewJson(r.body)
 			if err != nil {
