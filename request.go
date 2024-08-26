@@ -227,12 +227,19 @@ func (r *Request) Do(ctx context.Context) Result {
 		return Result{err: errors.New("http response is nil")}
 	}
 
-	data, err := io.ReadAll(rawResp.Body)
 	defer rawResp.Body.Close()
 
+	if rawResp.StatusCode != 200 {
+		return Result{err: errors.Errorf("unhealthy status code: [%d], status message: [%s]", rawResp.StatusCode, rawResp.Status)}
+	}
+
+	data, err := io.ReadAll(rawResp.Body)
+	if err != nil {
+		return Result{err: err, statusCode: rawResp.StatusCode, status: rawResp.Status}
+	}
 	return Result{
 		body:       data,
-		err:        err,
+		err:        nil,
 		statusCode: rawResp.StatusCode,
 		status:     rawResp.Status,
 	}
@@ -262,20 +269,6 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 	if r.err != nil {
 		return r.err
 	}
-
-	if r.StatusCode() != 200 {
-		s := string(r.body)
-		if isWarpHttpResponse {
-			j, err := simplejson.NewJson(r.body)
-			if err != nil {
-				return fmt.Errorf("marsher json error: %v, response body: %v", err, r.body)
-			}
-			message, _ := j.Get("message").String()
-			return errors.New(message)
-		}
-		return errors.New(s)
-	}
-
 	if reflect.TypeOf(obj).Kind() != reflect.Ptr {
 		return errors.New("object is not a ptr")
 	}
