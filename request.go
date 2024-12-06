@@ -20,6 +20,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	DefaultCodeField    = "code"
+	DefaultDataField    = "data"
+	DefaultMessageField = "message"
+)
+
 // Request allows for building up a request to a server in a chained fashion.
 // Any errors are stored until the end of your call, so you only have to
 // check once.
@@ -31,7 +37,8 @@ type Request struct {
 	params  string
 
 	// output
-	err  error
+	err error
+
 	body io.Reader
 }
 
@@ -294,15 +301,15 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 	// code message data
 	var marshalJSON []byte
 	if isWarpHttpResponse {
-		code, err := j.Get("code").Int()
+		code, err := j.Get(DefaultCodeField).Int()
 		if err != nil {
 			return err
 		}
 		if code != http.StatusOK {
-			message, _ := j.Get("message").String()
+			message, _ := j.Get(DefaultMessageField).String()
 			return fmt.Errorf(message)
 		}
-		data := j.Get("data")
+		data := j.Get(DefaultDataField)
 		data.Del("@type") // 适配 grpc 存在的 @type 字段
 		marshalJSON, err = data.MarshalJSON()
 		if err != nil {
@@ -398,15 +405,15 @@ func (r Result) TransformResponse() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	code, err := j.Get("code").Int()
+	code, err := j.Get(DefaultCodeField).Int()
 	if err != nil {
 		return nil, err
 	}
 	if code != http.StatusOK {
-		message, _ := j.Get("message").String()
+		message, _ := j.Get(DefaultMessageField).String()
 		return nil, fmt.Errorf(message)
 	}
-	marshalJSON, err := j.Get("data").MarshalJSON()
+	marshalJSON, err := j.Get(DefaultDataField).MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
