@@ -20,7 +20,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
+var (
 	DefaultCodeField    = "code"
 	DefaultDataField    = "data"
 	DefaultMessageField = "message"
