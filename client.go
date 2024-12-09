@@ -9,6 +9,9 @@ type Interface interface {
 	Verb(verb string) *Request
 	Post() *Request
 	Get() *Request
+
+	GetHeader() http.Header
+	SetHeader(header http.Header)
 }
 
 type Opt func(client *RESTClient) error
@@ -37,6 +40,14 @@ func (r *RESTClient) Post() *Request {
 
 func (r *RESTClient) Get() *Request {
 	return r.Verb("GET")
+}
+
+func (r *RESTClient) GetHeader() http.Header {
+	return r.headers
+}
+
+func (r *RESTClient) SetHeader(header http.Header) {
+	r.headers = header
 }
 
 func New(ops ...Opt) (*RESTClient, error) {
