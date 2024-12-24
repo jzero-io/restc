@@ -165,6 +165,8 @@ func (r *Request) Body(obj interface{}) *Request {
 	}
 
 	switch t := obj.(type) {
+	case io.ReadCloser:
+		r.body = t
 	case string:
 		r.body = bytes.NewReader([]byte(t))
 	case []byte:
