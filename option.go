@@ -61,3 +61,10 @@ func WithRetryDelay(time time.Duration) Opt {
 		return nil
 	}
 }
+
+func WithClient(client *http.Client) Opt {
+	return func(c *RESTClient) error {
+		c.client = client
+		return nil
+	}
+}
