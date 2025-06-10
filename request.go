@@ -59,9 +59,9 @@ type PathParam struct {
 	Value interface{}
 }
 
-// SubPath set subPath
-func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
-	r.subPath = subPath
+// Path set path
+func (r *Request) Path(path string, args ...PathParam) *Request {
+	r.subPath = path
 	for _, v := range args {
 		val := reflect.ValueOf(v.Value)
 		kind := val.Kind()
@@ -70,11 +70,11 @@ func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
 			if err != nil {
 				panic(err)
 			}
-			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(js[1:len(js)-1]))
-			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(js[1:len(js)-1]))
+			path = strings.ReplaceAll(path, "{"+v.Name+"}", cast.ToString(js[1:len(js)-1]))
+			path = strings.ReplaceAll(path, ":"+v.Name, cast.ToString(js[1:len(js)-1]))
 		} else {
-			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(v.Value))
-			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(v.Value))
+			path = strings.ReplaceAll(path, "{"+v.Name+"}", cast.ToString(v.Value))
+			path = strings.ReplaceAll(path, ":"+v.Name, cast.ToString(v.Value))
 		}
 	}
 	return r
@@ -124,8 +124,8 @@ func (r *Request) Params(args ...QueryParam) *Request {
 	return r
 }
 
-// defaultUrl get default url for common request
-func (r *Request) defaultUrl() (string, error) {
+// getUrl get url for request
+func (r *Request) getUrl() (string, error) {
 	if r.c.protocol == "" || r.c.addr == "" {
 		return "", errors.New("invalid url, please check")
 	}
@@ -139,8 +139,8 @@ func (r *Request) defaultUrl() (string, error) {
 	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
 }
 
-// WSUrl get WS url for request
-func (r *Request) wsUrl() (string, error) {
+// wsUrl get websocket url for request
+func (r *Request) getWsUrl() (string, error) {
 	if r.c.protocol == "" || r.c.addr == "" || r.c.port == "" {
 		return "", errors.New("invalid url, you may not login")
 	}
@@ -196,7 +196,7 @@ type Result struct {
 // Error type:
 // http.Client.Do errors are returned directly.
 func (r *Request) Do(ctx context.Context) Result {
-	defaultUrl, err := r.defaultUrl()
+	defaultUrl, err := r.getUrl()
 	if err != nil {
 		return Result{err: err}
 	}
@@ -251,7 +251,7 @@ func (r *Request) Do(ctx context.Context) Result {
 }
 
 func (r *Request) WsConn(ctx context.Context) (*websocket.Conn, *http.Response, error) {
-	wsUrl, err := r.wsUrl()
+	wsUrl, err := r.getWsUrl()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -364,7 +364,7 @@ func (r Result) Into(obj interface{}, options *IntoOptions) error {
 
 // Stream proto Stream way return io.ReadCloser
 func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
-	defaultUrl, err := r.defaultUrl()
+	defaultUrl, err := r.getUrl()
 	if err != nil {
 		return nil, err
 	}
