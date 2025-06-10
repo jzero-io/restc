@@ -2,10 +2,11 @@ package restc
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 )
 
-type Interface interface {
+type Client interface {
 	Verb(verb string) *Request
 	Post() *Request
 	Get() *Request
@@ -14,9 +15,9 @@ type Interface interface {
 	SetHeader(header http.Header)
 }
 
-type Opt func(client *RestClient) error
+type Opt func(client *client) error
 
-type RestClient struct {
+type client struct {
 	protocol string
 	addr     string
 	port     string
@@ -30,30 +31,40 @@ type RestClient struct {
 	client *http.Client
 }
 
-func (r *RestClient) Verb(verb string) *Request {
+func (r *client) Verb(verb string) *Request {
 	return NewRequest(r).Verb(verb)
 }
 
-func (r *RestClient) Post() *Request {
+func (r *client) Post() *Request {
 	return r.Verb("POST")
 }
 
-func (r *RestClient) Get() *Request {
+func (r *client) Get() *Request {
 	return r.Verb("GET")
 }
 
-func (r *RestClient) GetHeader() http.Header {
+func (r *client) GetHeader() http.Header {
 	return r.headers
 }
 
-func (r *RestClient) SetHeader(header http.Header) {
+func (r *client) SetHeader(header http.Header) {
 	r.headers = header
 }
 
-func New(ops ...Opt) (*RestClient, error) {
-	c := &RestClient{}
+func NewClient(target string, ops ...Opt) (Client, error) {
+	c := &client{}
+
+	// parse url
+	parse, err := url.Parse(target)
+	if err != nil {
+		return nil, err
+	}
+	c.protocol = parse.Scheme
+	c.addr = parse.Hostname()
+	c.port = parse.Port()
+
 	for _, op := range ops {
-		if err := op(c); err != nil {
+		if err = op(c); err != nil {
 			return nil, err
 		}
 	}

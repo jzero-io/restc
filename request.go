@@ -30,7 +30,7 @@ var (
 // Any errors are stored until the end of your call, so you only have to
 // check once.
 type Request struct {
-	c *RestClient
+	c *client
 
 	verb    string
 	subPath string
@@ -42,7 +42,7 @@ type Request struct {
 	body io.Reader
 }
 
-func NewRequest(c *RestClient) *Request {
+func NewRequest(c *client) *Request {
 	r := &Request{
 		c: c,
 	}
