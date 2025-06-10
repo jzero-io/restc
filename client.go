@@ -14,9 +14,9 @@ type Interface interface {
 	SetHeader(header http.Header)
 }
 
-type Opt func(client *RESTClient) error
+type Opt func(client *RestClient) error
 
-type RESTClient struct {
+type RestClient struct {
 	protocol string
 	addr     string
 	port     string
@@ -30,28 +30,28 @@ type RESTClient struct {
 	client *http.Client
 }
 
-func (r *RESTClient) Verb(verb string) *Request {
+func (r *RestClient) Verb(verb string) *Request {
 	return NewRequest(r).Verb(verb)
 }
 
-func (r *RESTClient) Post() *Request {
+func (r *RestClient) Post() *Request {
 	return r.Verb("POST")
 }
 
-func (r *RESTClient) Get() *Request {
+func (r *RestClient) Get() *Request {
 	return r.Verb("GET")
 }
 
-func (r *RESTClient) GetHeader() http.Header {
+func (r *RestClient) GetHeader() http.Header {
 	return r.headers
 }
 
-func (r *RESTClient) SetHeader(header http.Header) {
+func (r *RestClient) SetHeader(header http.Header) {
 	r.headers = header
 }
 
-func New(ops ...Opt) (*RESTClient, error) {
-	c := &RESTClient{}
+func New(ops ...Opt) (*RestClient, error) {
+	c := &RestClient{}
 	for _, op := range ops {
 		if err := op(c); err != nil {
 			return nil, err

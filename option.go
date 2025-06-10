@@ -7,7 +7,7 @@ import (
 )
 
 func WithUrl(u string) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		// parse url
 		parse, err := url.Parse(u)
 		if err != nil {
@@ -21,49 +21,49 @@ func WithUrl(u string) Opt {
 }
 
 func WithHeaders(headers http.Header) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.headers = headers
 		return nil
 	}
 }
 
 func WithProtocol(protocol string) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.protocol = protocol
 		return nil
 	}
 }
 
 func WithAddr(addr string) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.addr = addr
 		return nil
 	}
 }
 
 func WithPort(port string) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.port = port
 		return nil
 	}
 }
 
 func WithRetryTimes(times int) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.retryTimes = times
 		return nil
 	}
 }
 
 func WithRetryDelay(time time.Duration) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.retryDelay = time
 		return nil
 	}
 }
 
 func WithClient(client *http.Client) Opt {
-	return func(c *RESTClient) error {
+	return func(c *RestClient) error {
 		c.client = client
 		return nil
 	}

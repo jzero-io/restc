@@ -23,14 +23,14 @@ import (
 var (
 	DefaultCodeField    = "code"
 	DefaultDataField    = "data"
-	DefaultMessageField = "message"
+	DefaultMessageField = "msg"
 )
 
 // Request allows for building up a request to a server in a chained fashion.
 // Any errors are stored until the end of your call, so you only have to
 // check once.
 type Request struct {
-	c *RESTClient
+	c *RestClient
 
 	verb    string
 	subPath string
@@ -42,7 +42,7 @@ type Request struct {
 	body io.Reader
 }
 
-func NewRequest(c *RESTClient) *Request {
+func NewRequest(c *RestClient) *Request {
 	r := &Request{
 		c: c,
 	}
@@ -237,6 +237,9 @@ func (r *Request) Do(ctx context.Context) Result {
 	}
 
 	data, err := io.ReadAll(rawResp.Body)
+	if err != nil {
+		return Result{err: err}
+	}
 	defer rawResp.Body.Close()
 
 	return Result{
@@ -266,32 +269,53 @@ func doRequest(client *http.Client, request *http.Request) (*http.Response, erro
 	return res, nil
 }
 
+type IntoOptions struct {
+	WrapCodeMsg        bool
+	WrapCodeMsgMapping struct {
+		CodeField string
+		DataField string
+		MsgField  string
+	}
+}
+
 // Into stores the result into obj, if possible. If obj is nil it is ignored.
-func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
+func (r Result) Into(obj interface{}, options *IntoOptions) error {
+	if reflect.TypeOf(obj).Kind() != reflect.Ptr {
+		return errors.New("object is not a ptr")
+	}
+
 	if r.err != nil {
 		return r.err
 	}
 
-	if r.StatusCode() != 200 {
+	if options != nil {
+		if options.WrapCodeMsg && options.WrapCodeMsgMapping.CodeField == "" {
+			options.WrapCodeMsgMapping.CodeField = DefaultCodeField
+		}
+		if options.WrapCodeMsg && options.WrapCodeMsgMapping.DataField == "" {
+			options.WrapCodeMsgMapping.DataField = DefaultDataField
+		}
+		if options.WrapCodeMsg && options.WrapCodeMsgMapping.MsgField == "" {
+			options.WrapCodeMsgMapping.MsgField = DefaultMessageField
+		}
+	}
+
+	if r.StatusCode() != http.StatusOK {
 		s := string(r.body)
 
 		if len(s) == 0 {
 			return fmt.Errorf("empty response body, status code: %d", r.StatusCode())
 		}
 
-		if isWarpHttpResponse {
+		if options != nil && options.WrapCodeMsg {
 			j, err := simplejson.NewJson(r.body)
 			if err != nil {
 				return fmt.Errorf("marsher json error: %v, response body: %v", err, r.body)
 			}
-			message, _ := j.Get("message").String()
+			message, _ := j.Get(options.WrapCodeMsgMapping.MsgField).String()
 			return errors.New(message)
 		}
 		return errors.New(s)
-	}
-
-	if reflect.TypeOf(obj).Kind() != reflect.Ptr {
-		return errors.New("object is not a ptr")
 	}
 
 	j, err := simplejson.NewJson(r.body)
@@ -299,20 +323,17 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 		return err
 	}
 
-	// parse response data
-	// code message data
 	var marshalJSON []byte
-	if isWarpHttpResponse {
-		code, err := j.Get(DefaultCodeField).Int()
+	if options.WrapCodeMsg {
+		code, err := j.Get(options.WrapCodeMsgMapping.CodeField).Int()
 		if err != nil {
 			return err
 		}
 		if code != http.StatusOK {
-			message, _ := j.Get(DefaultMessageField).String()
+			message, _ := j.Get(options.WrapCodeMsgMapping.MsgField).String()
 			return fmt.Errorf(message)
 		}
-		data := j.Get(DefaultDataField)
-		data.Del("@type") // 适配 grpc 存在的 @type 字段
+		data := j.Get(options.WrapCodeMsgMapping.DataField)
 		marshalJSON, err = data.MarshalJSON()
 		if err != nil {
 			return err
@@ -339,12 +360,6 @@ func (r Result) Into(obj interface{}, isWarpHttpResponse bool) error {
 	}
 
 	return nil
-}
-
-// StatusCode returns the HTTP status code of the request. (Only valid if no
-// error was returned.)
-func (r Result) StatusCode() int {
-	return r.statusCode
 }
 
 // Stream proto Stream way return io.ReadCloser
@@ -396,32 +411,6 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 	return rawResp.Body, nil
 }
 
-func (r Result) TransformResponse() ([]byte, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-
-	// parse response data
-	// code message data
-	j, err := simplejson.NewJson(r.body)
-	if err != nil {
-		return nil, err
-	}
-	code, err := j.Get(DefaultCodeField).Int()
-	if err != nil {
-		return nil, err
-	}
-	if code != http.StatusOK {
-		message, _ := j.Get(DefaultMessageField).String()
-		return nil, fmt.Errorf(message)
-	}
-	marshalJSON, err := j.Get(DefaultDataField).MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	return marshalJSON, nil
-}
-
 func (r Result) RawResponse() ([]byte, error) {
 	return r.body, r.err
 }
@@ -429,6 +418,12 @@ func (r Result) RawResponse() ([]byte, error) {
 // Error returns the error executing the request, nil if no error occurred.
 func (r Result) Error() error {
 	return r.err
+}
+
+// StatusCode returns the HTTP status code of the request. (Only valid if no
+// error was returned.)
+func (r Result) StatusCode() int {
+	return r.statusCode
 }
 
 // Status returns the status executing the request
