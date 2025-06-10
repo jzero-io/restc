@@ -30,21 +30,27 @@ var (
 // Any errors are stored until the end of your call, so you only have to
 // check once.
 type Request struct {
-	c *RestClient
+	c *client
 
-	verb    string
-	subPath string
-	params  string
+	verb string
+	path string
+
+	queryParams []QueryParam
 
 	// output
 	err error
 
+	// headers
+	headers http.Header
+
+	// body
 	body io.Reader
 }
 
-func NewRequest(c *RestClient) *Request {
+func NewRequest(c *client) *Request {
 	r := &Request{
-		c: c,
+		c:       c,
+		headers: c.headers.Clone(),
 	}
 	return r
 }
@@ -54,14 +60,67 @@ func (r *Request) Verb(verb string) *Request {
 	return r
 }
 
+func (r *Request) GetBody() io.Reader {
+	return r.body
+}
+
+func (r *Request) GetParams() []QueryParam {
+	return r.queryParams
+}
+
+func (r *Request) parseParam() string {
+	if len(r.queryParams) == 0 {
+		return ""
+	}
+
+	var queryParams strings.Builder
+	queryParams.WriteString("?")
+	for i, v := range r.queryParams {
+		val := reflect.ValueOf(v.Value)
+		kind := val.Kind()
+		if kind == reflect.Slice || kind == reflect.Array {
+			length := val.Len()
+			for j := 0; j < length; j++ {
+				value := val.Index(j).Interface()
+				if cast.ToString(value) == "" {
+					continue
+				}
+				va := url.QueryEscape(cast.ToString(value))
+				if i == len(r.queryParams)-1 && j == length-1 {
+					queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
+				} else {
+					queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
+				}
+			}
+		} else {
+			if cast.ToString(v.Value) == "" {
+				continue
+			}
+			va := url.QueryEscape(cast.ToString(v.Value))
+			if i == len(r.queryParams)-1 {
+				queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
+			} else {
+				queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
+			}
+		}
+	}
+	return queryParams.String()
+}
+
+func (r *Request) AddHeader(key, value string) {
+	r.c.lock.Lock()
+	defer r.c.lock.Unlock()
+	r.headers.Set(key, value)
+}
+
 type PathParam struct {
 	Name  string
 	Value interface{}
 }
 
-// SubPath set subPath
-func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
-	r.subPath = subPath
+// Path set path
+func (r *Request) Path(path string, args ...PathParam) *Request {
+	r.path = path
 	for _, v := range args {
 		val := reflect.ValueOf(v.Value)
 		kind := val.Kind()
@@ -70,11 +129,11 @@ func (r *Request) SubPath(subPath string, args ...PathParam) *Request {
 			if err != nil {
 				panic(err)
 			}
-			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(js[1:len(js)-1]))
-			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(js[1:len(js)-1]))
+			path = strings.ReplaceAll(path, "{"+v.Name+"}", cast.ToString(js[1:len(js)-1]))
+			path = strings.ReplaceAll(path, ":"+v.Name, cast.ToString(js[1:len(js)-1]))
 		} else {
-			subPath = strings.ReplaceAll(subPath, "{"+v.Name+"}", cast.ToString(v.Value))
-			subPath = strings.ReplaceAll(subPath, ":"+v.Name, cast.ToString(v.Value))
+			path = strings.ReplaceAll(path, "{"+v.Name+"}", cast.ToString(v.Value))
+			path = strings.ReplaceAll(path, ":"+v.Name, cast.ToString(v.Value))
 		}
 	}
 	return r
@@ -89,43 +148,12 @@ func (r *Request) Params(args ...QueryParam) *Request {
 	if len(args) == 0 {
 		return r
 	}
-	var queryParams strings.Builder
-	queryParams.WriteString("?")
-	for i, v := range args {
-		val := reflect.ValueOf(v.Value)
-		kind := val.Kind()
-		if kind == reflect.Slice || kind == reflect.Array {
-			length := val.Len()
-			for j := 0; j < length; j++ {
-				value := val.Index(j).Interface()
-				if cast.ToString(value) == "" {
-					continue
-				}
-				va := url.QueryEscape(cast.ToString(value))
-				if i == len(args)-1 && j == length-1 {
-					queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
-				} else {
-					queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
-				}
-			}
-		} else {
-			if cast.ToString(v.Value) == "" {
-				continue
-			}
-			va := url.QueryEscape(cast.ToString(v.Value))
-			if i == len(args)-1 {
-				queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
-			} else {
-				queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
-			}
-		}
-	}
-	r.params = queryParams.String()
+	r.queryParams = args
 	return r
 }
 
-// defaultUrl get default url for common request
-func (r *Request) defaultUrl() (string, error) {
+// getUrl get url for request
+func (r *Request) getUrl() (string, error) {
 	if r.c.protocol == "" || r.c.addr == "" {
 		return "", errors.New("invalid url, please check")
 	}
@@ -136,11 +164,11 @@ func (r *Request) defaultUrl() (string, error) {
 		r.c.port = "80"
 	}
 
-	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
+	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.path+r.parseParam()), nil
 }
 
-// WSUrl get WS url for request
-func (r *Request) wsUrl() (string, error) {
+// wsUrl get websocket url for request
+func (r *Request) getWsUrl() (string, error) {
 	if r.c.protocol == "" || r.c.addr == "" || r.c.port == "" {
 		return "", errors.New("invalid url, you may not login")
 	}
@@ -152,7 +180,7 @@ func (r *Request) wsUrl() (string, error) {
 		r.c.protocol = "ws"
 	}
 
-	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
+	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.path+r.parseParam()), nil
 }
 
 // Body makes the request use obj as the body. Optional.
@@ -165,6 +193,8 @@ func (r *Request) Body(obj interface{}) *Request {
 	}
 
 	switch t := obj.(type) {
+	case io.Reader:
+		r.body = t
 	case io.ReadCloser:
 		r.body = t
 	case string:
@@ -196,7 +226,11 @@ type Result struct {
 // Error type:
 // http.Client.Do errors are returned directly.
 func (r *Request) Do(ctx context.Context) Result {
-	defaultUrl, err := r.defaultUrl()
+	if err := r.c.executeRequestMiddlewares(r); err != nil {
+		return Result{err: err}
+	}
+
+	defaultUrl, err := r.getUrl()
 	if err != nil {
 		return Result{err: err}
 	}
@@ -206,8 +240,6 @@ func (r *Request) Do(ctx context.Context) Result {
 		return Result{err: err}
 	}
 
-	request.Header = r.c.headers
-
 	if r.c.client == nil {
 		r.c.client = http.DefaultClient
 	}
@@ -215,11 +247,12 @@ func (r *Request) Do(ctx context.Context) Result {
 	if r.c.retryTimes == 0 {
 		r.c.retryTimes = 1
 	}
+	request.Header = r.headers
 
 	var rawResp *http.Response
 	// if meet error, retry times that you set
 	for k := 0; k < r.c.retryTimes; k++ {
-		rawResp, err = doRequest(r.c.client, request)
+		rawResp, err = r.doRequest(r.c.client, request)
 		if err != nil {
 			// sleep retry delay
 			time.Sleep(r.c.retryDelay)
@@ -251,14 +284,14 @@ func (r *Request) Do(ctx context.Context) Result {
 }
 
 func (r *Request) WsConn(ctx context.Context) (*websocket.Conn, *http.Response, error) {
-	wsUrl, err := r.wsUrl()
+	wsUrl, err := r.getWsUrl()
 	if err != nil {
 		return nil, nil, err
 	}
 	return websocket.DefaultDialer.DialContext(ctx, wsUrl, r.c.headers)
 }
 
-func doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
+func (r *Request) doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
 	res, err := client.Do(request)
 	if err != nil {
 		return nil, err
@@ -364,7 +397,7 @@ func (r Result) Into(obj interface{}, options *IntoOptions) error {
 
 // Stream proto Stream way return io.ReadCloser
 func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
-	defaultUrl, err := r.defaultUrl()
+	defaultUrl, err := r.getUrl()
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +407,7 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	request.Header = r.c.headers
+	request.Header = r.headers
 
 	if r.c.client == nil {
 		r.c.client = http.DefaultClient
@@ -387,7 +420,7 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 	var rawResp *http.Response
 	// if meet error, retry times that you set
 	for k := 0; k < r.c.retryTimes; k++ {
-		rawResp, err = doRequest(r.c.client, request)
+		rawResp, err = r.doRequest(r.c.client, request)
 		if err != nil {
 			// sleep retry delay
 			time.Sleep(r.c.retryDelay)
