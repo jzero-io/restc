@@ -32,9 +32,10 @@ var (
 type Request struct {
 	c *client
 
-	verb    string
-	subPath string
-	params  string
+	verb string
+	path string
+
+	queryParams []QueryParam
 
 	// output
 	err error
@@ -63,6 +64,45 @@ func (r *Request) GetBody() io.Reader {
 	return r.body
 }
 
+func (r *Request) GetParams() []QueryParam {
+	return r.queryParams
+}
+
+func (r *Request) parseParam() string {
+	var queryParams strings.Builder
+	queryParams.WriteString("?")
+	for i, v := range r.queryParams {
+		val := reflect.ValueOf(v.Value)
+		kind := val.Kind()
+		if kind == reflect.Slice || kind == reflect.Array {
+			length := val.Len()
+			for j := 0; j < length; j++ {
+				value := val.Index(j).Interface()
+				if cast.ToString(value) == "" {
+					continue
+				}
+				va := url.QueryEscape(cast.ToString(value))
+				if i == len(r.queryParams)-1 && j == length-1 {
+					queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
+				} else {
+					queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
+				}
+			}
+		} else {
+			if cast.ToString(v.Value) == "" {
+				continue
+			}
+			va := url.QueryEscape(cast.ToString(v.Value))
+			if i == len(r.queryParams)-1 {
+				queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
+			} else {
+				queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
+			}
+		}
+	}
+	return queryParams.String()
+}
+
 func (r *Request) AddHeader(key, value string) {
 	if r.headers == nil {
 		r.headers = http.Header{}
@@ -77,7 +117,7 @@ type PathParam struct {
 
 // Path set path
 func (r *Request) Path(path string, args ...PathParam) *Request {
-	r.subPath = path
+	r.path = path
 	for _, v := range args {
 		val := reflect.ValueOf(v.Value)
 		kind := val.Kind()
@@ -105,38 +145,7 @@ func (r *Request) Params(args ...QueryParam) *Request {
 	if len(args) == 0 {
 		return r
 	}
-	var queryParams strings.Builder
-	queryParams.WriteString("?")
-	for i, v := range args {
-		val := reflect.ValueOf(v.Value)
-		kind := val.Kind()
-		if kind == reflect.Slice || kind == reflect.Array {
-			length := val.Len()
-			for j := 0; j < length; j++ {
-				value := val.Index(j).Interface()
-				if cast.ToString(value) == "" {
-					continue
-				}
-				va := url.QueryEscape(cast.ToString(value))
-				if i == len(args)-1 && j == length-1 {
-					queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
-				} else {
-					queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
-				}
-			}
-		} else {
-			if cast.ToString(v.Value) == "" {
-				continue
-			}
-			va := url.QueryEscape(cast.ToString(v.Value))
-			if i == len(args)-1 {
-				queryParams.WriteString(fmt.Sprintf("%s=%s", v.Name, va))
-			} else {
-				queryParams.WriteString(fmt.Sprintf("%s=%s&", v.Name, va))
-			}
-		}
-	}
-	r.params = queryParams.String()
+	r.queryParams = args
 	return r
 }
 
@@ -152,7 +161,7 @@ func (r *Request) getUrl() (string, error) {
 		r.c.port = "80"
 	}
 
-	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
+	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.path+r.parseParam()), nil
 }
 
 // wsUrl get websocket url for request
@@ -168,7 +177,7 @@ func (r *Request) getWsUrl() (string, error) {
 		r.c.protocol = "ws"
 	}
 
-	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.subPath+r.params), nil
+	return fmt.Sprintf("%s://%s:%s", r.c.protocol, r.c.addr, r.c.port+r.path+r.parseParam()), nil
 }
 
 // Body makes the request use obj as the body. Optional.
