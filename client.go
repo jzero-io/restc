@@ -75,7 +75,8 @@ func (c *client) SetHeader(header http.Header) {
 
 func NewClient(target string, ops ...Opt) (Client, error) {
 	c := &client{
-		lock: &sync.RWMutex{},
+		lock:    &sync.RWMutex{},
+		headers: make(http.Header),
 	}
 
 	// parse url

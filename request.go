@@ -108,9 +108,6 @@ func (r *Request) parseParam() string {
 }
 
 func (r *Request) AddHeader(key, value string) {
-	if r.headers == nil {
-		r.headers = http.Header{}
-	}
 	r.c.lock.Lock()
 	defer r.c.lock.Unlock()
 	r.headers.Set(key, value)
