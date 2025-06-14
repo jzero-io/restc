@@ -69,6 +69,10 @@ func (r *Request) GetParams() []QueryParam {
 }
 
 func (r *Request) parseParam() string {
+	if len(r.queryParams) == 0 {
+		return ""
+	}
+
 	var queryParams strings.Builder
 	queryParams.WriteString("?")
 	for i, v := range r.queryParams {
@@ -109,7 +113,7 @@ func (r *Request) AddHeader(key, value string) {
 	}
 	r.c.lock.Lock()
 	defer r.c.lock.Unlock()
-	r.headers.Add(key, value)
+	r.headers.Set(key, value)
 }
 
 type PathParam struct {
