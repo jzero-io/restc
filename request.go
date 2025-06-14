@@ -196,6 +196,8 @@ func (r *Request) Body(obj interface{}) *Request {
 	}
 
 	switch t := obj.(type) {
+	case io.Reader:
+		r.body = t
 	case io.ReadCloser:
 		r.body = t
 	case string:
