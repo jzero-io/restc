@@ -50,7 +50,7 @@ type Request struct {
 func NewRequest(c *client) *Request {
 	r := &Request{
 		c:       c,
-		headers: c.headers,
+		headers: c.headers.Clone(),
 	}
 	return r
 }
