@@ -221,6 +221,10 @@ type Result struct {
 // Error type:
 // http.Client.Do errors are returned directly.
 func (r *Request) Do(ctx context.Context) Result {
+	if err := r.c.executeRequestMiddlewares(r); err != nil {
+		return Result{err: err}
+	}
+
 	defaultUrl, err := r.getUrl()
 	if err != nil {
 		return Result{err: err}
@@ -238,6 +242,7 @@ func (r *Request) Do(ctx context.Context) Result {
 	if r.c.retryTimes == 0 {
 		r.c.retryTimes = 1
 	}
+	request.Header = r.headers
 
 	var rawResp *http.Response
 	// if meet error, retry times that you set
@@ -282,11 +287,6 @@ func (r *Request) WsConn(ctx context.Context) (*websocket.Conn, *http.Response, 
 }
 
 func (r *Request) doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
-	if err := r.c.executeRequestMiddlewares(r); err != nil {
-		return nil, err
-	}
-	request.Header = r.headers
-
 	res, err := client.Do(request)
 	if err != nil {
 		return nil, err
