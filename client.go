@@ -3,6 +3,7 @@ package restc
 import (
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type Client interface {
 type Opt func(client *client) error
 
 type client struct {
+	lock     *sync.RWMutex
 	protocol string
 	addr     string
 	port     string
@@ -29,30 +31,52 @@ type client struct {
 
 	// Set specific behavior of the client.  If not set http.DefaultClient will be used.
 	client *http.Client
+
+	// middleware
+	beforeRequest []RequestMiddleware
 }
 
-func (r *client) Verb(verb string) *Request {
-	return NewRequest(r).Verb(verb)
+type RequestMiddleware func(Client, *Request) error
+
+func (c *client) requestMiddlewares() []RequestMiddleware {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.beforeRequest
 }
 
-func (r *client) Post() *Request {
-	return r.Verb("POST")
+func (c *client) executeRequestMiddlewares(req *Request) (err error) {
+	for _, f := range c.requestMiddlewares() {
+		if err = f(c, req); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (r *client) Get() *Request {
-	return r.Verb("GET")
+func (c *client) Verb(verb string) *Request {
+	return NewRequest(c).Verb(verb)
 }
 
-func (r *client) GetHeader() http.Header {
-	return r.headers
+func (c *client) Post() *Request {
+	return c.Verb("POST")
 }
 
-func (r *client) SetHeader(header http.Header) {
-	r.headers = header
+func (c *client) Get() *Request {
+	return c.Verb("GET")
+}
+
+func (c *client) GetHeader() http.Header {
+	return c.headers
+}
+
+func (c *client) SetHeader(header http.Header) {
+	c.headers = header
 }
 
 func NewClient(target string, ops ...Opt) (Client, error) {
-	c := &client{}
+	c := &client{
+		lock: &sync.RWMutex{},
+	}
 
 	// parse url
 	parse, err := url.Parse(target)

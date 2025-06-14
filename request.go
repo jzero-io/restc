@@ -39,12 +39,17 @@ type Request struct {
 	// output
 	err error
 
+	// headers
+	headers http.Header
+
+	// body
 	body io.Reader
 }
 
 func NewRequest(c *client) *Request {
 	r := &Request{
-		c: c,
+		c:       c,
+		headers: c.headers,
 	}
 	return r
 }
@@ -52,6 +57,17 @@ func NewRequest(c *client) *Request {
 func (r *Request) Verb(verb string) *Request {
 	r.verb = verb
 	return r
+}
+
+func (r *Request) GetBody() io.Reader {
+	return r.body
+}
+
+func (r *Request) AddHeader(key, value string) {
+	if r.headers == nil {
+		r.headers = http.Header{}
+	}
+	r.headers.Add(key, value)
 }
 
 type PathParam struct {
@@ -206,8 +222,6 @@ func (r *Request) Do(ctx context.Context) Result {
 		return Result{err: err}
 	}
 
-	request.Header = r.c.headers
-
 	if r.c.client == nil {
 		r.c.client = http.DefaultClient
 	}
@@ -219,7 +233,7 @@ func (r *Request) Do(ctx context.Context) Result {
 	var rawResp *http.Response
 	// if meet error, retry times that you set
 	for k := 0; k < r.c.retryTimes; k++ {
-		rawResp, err = doRequest(r.c.client, request)
+		rawResp, err = r.doRequest(r.c.client, request)
 		if err != nil {
 			// sleep retry delay
 			time.Sleep(r.c.retryDelay)
@@ -258,7 +272,12 @@ func (r *Request) WsConn(ctx context.Context) (*websocket.Conn, *http.Response, 
 	return websocket.DefaultDialer.DialContext(ctx, wsUrl, r.c.headers)
 }
 
-func doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
+func (r *Request) doRequest(client *http.Client, request *http.Request) (*http.Response, error) {
+	if err := r.c.executeRequestMiddlewares(r); err != nil {
+		return nil, err
+	}
+	request.Header = r.headers
+
 	res, err := client.Do(request)
 	if err != nil {
 		return nil, err
@@ -374,7 +393,7 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	request.Header = r.c.headers
+	request.Header = r.headers
 
 	if r.c.client == nil {
 		r.c.client = http.DefaultClient
@@ -387,7 +406,7 @@ func (r *Request) Stream(ctx context.Context) (io.ReadCloser, error) {
 	var rawResp *http.Response
 	// if meet error, retry times that you set
 	for k := 0; k < r.c.retryTimes; k++ {
-		rawResp, err = doRequest(r.c.client, request)
+		rawResp, err = r.doRequest(r.c.client, request)
 		if err != nil {
 			// sleep retry delay
 			time.Sleep(r.c.retryDelay)

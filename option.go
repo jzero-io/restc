@@ -32,3 +32,12 @@ func WithClient(c *http.Client) Opt {
 		return nil
 	}
 }
+
+func WithRequestMiddleware(middleware RequestMiddleware) Opt {
+	return func(c *client) error {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		c.beforeRequest = append(c.beforeRequest, middleware)
+		return nil
+	}
+}
