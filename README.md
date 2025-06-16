@@ -13,12 +13,12 @@ import (
 )
 
 func main() {
-	restClient, err := restc.New(restc.WithUrl("http://127.0.0.1:8080"))
-	if err != nil {
-		panic(err)
-	}
+	restClient, err := NewClient("http://127.0.0.1:8080", WithRequestMiddleware(func(c Client, request *Request) error {
+		request.AddHeader("test", "test")
+		return nil
+	}))
 
-	result := restClient.Get().SubPath("/api/v1/version").Do(context.Background())
+	result := restClient.Verb("GET").Path("/api/v1/version").Do(context.Background())
 	if result.Error() != nil {
 		panic(err)
 	}
