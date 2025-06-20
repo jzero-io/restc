@@ -9,6 +9,7 @@ import (
 
 type Client interface {
 	Verb(verb string) *Request
+	SetHeader(headers http.Header)
 }
 
 type Opt func(client *client) error
@@ -29,6 +30,10 @@ type client struct {
 
 	// middleware
 	beforeRequest []RequestMiddleware
+}
+
+func (c *client) SetHeader(headers http.Header) {
+	c.headers = headers
 }
 
 type RequestMiddleware func(Client, *Request) error
