@@ -1,6 +1,6 @@
 # restc
 
-> 该仓库被废弃⚠️ 请使用: https://github.com/jzero-io/jzero/core/restc
+> 该仓库被废弃⚠️ 请使用: https://github.com/jzero-io/jzero/tree/main/core/restc
 
 rest client for calling apis
 
